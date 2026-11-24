@@ -1,0 +1,8 @@
+# Never commit credentials
+*.pem
+*.key
+config
+.oci/
+.ssh/
+out.txt
+__pycache__/

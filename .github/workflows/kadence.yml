@@ -1,0 +1,89 @@
+name: Kadence VM retry
+
+on:
+  schedule:
+    # Every 30 min. Public repo = unlimited Actions minutes, so you can use "*/10 * * * *".
+    # Private repo = 2000 free min/month, so keep this at 30 min or slower.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: kadence
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write   # lets the job disable itself once the VM is up
+  issues: write    # opens an issue (you get an email) on success / blocked
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install OCI SDK
+        run: pip install -r requirements.txt
+
+      - name: Write OCI config and SSH key from secrets
+        env:
+          OCI_USER: ${{ secrets.OCI_USER }}
+          OCI_TENANCY: ${{ secrets.OCI_TENANCY }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_KEY_PEM: ${{ secrets.OCI_KEY_PEM }}
+          SSH_PUBLIC_KEY: ${{ secrets.SSH_PUBLIC_KEY }}
+        run: |
+          umask 077
+          mkdir -p ~/.oci ~/.ssh
+          printf '%s\n' "$OCI_KEY_PEM" > ~/.oci/oci_api_key.pem
+          printf '%s\n' "$SSH_PUBLIC_KEY" > ~/.ssh/control-hub.pub
+          cat > ~/.oci/config <<EOF
+          [DEFAULT]
+          user=$OCI_USER
+          fingerprint=$OCI_FINGERPRINT
+          tenancy=$OCI_TENANCY
+          region=$OCI_REGION
+          key_file=$HOME/.oci/oci_api_key.pem
+          EOF
+
+      - name: Attempt launch (one try)
+        id: launch
+        env:
+          KADENCE_NO_JITTER: "1"
+        run: |
+          set +e
+          python create_kadence.py 2>&1 | tee out.txt
+          code=${PIPESTATUS[0]}
+          last=$(tail -n 1 out.txt)
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "last=$last" >> "$GITHUB_OUTPUT"
+          echo "### $last" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+
+      - name: VM is up - notify and stop retrying
+        if: startsWith(steps.launch.outputs.last, 'KADENCE_RUNNING')
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Kadence VM is RUNNING" \
+            --body "${{ steps.launch.outputs.last }}. Connect with: ssh -i ~/.ssh/control-hub ubuntu@<the IP above>. This workflow has disabled itself."
+          gh workflow disable "Kadence VM retry" --repo "$GITHUB_REPOSITORY"
+
+      - name: Blocked - notify and stop retrying
+        if: startsWith(steps.launch.outputs.last, 'KADENCE_BLOCKED')
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "Kadence launch is BLOCKED" \
+            --body "${{ steps.launch.outputs.last }}. Fix the cause, then re-enable the workflow in the Actions tab."
+          gh workflow disable "Kadence VM retry" --repo "$GITHUB_REPOSITORY"
+
+      - name: Unexpected error - fail the run (GitHub emails you)
+        if: steps.launch.outputs.code != '0' && !startsWith(steps.launch.outputs.last, 'KADENCE_BLOCKED')
+        run: exit 1
