@@ -43,16 +43,37 @@ jobs:
         run: |
           umask 077
           mkdir -p ~/.oci ~/.ssh
-          printf '%s\n' "$OCI_KEY_PEM" > ~/.oci/oci_api_key.pem
+
+          # Clean a pasted value: drop spaces/CR/LF, an accidental "NAME=" prefix and quotes.
+          clean() { printf '%s' "$1" | tr -d '\r\n\t ' | sed -E 's/^[A-Za-z_]+=//; s/^["'"'"']//; s/["'"'"']$//'; }
+          U=$(clean "$OCI_USER"); T=$(clean "$OCI_TENANCY"); F=$(clean "$OCI_FINGERPRINT"); R=$(clean "$OCI_REGION")
+
+          # Check shapes only (never prints values).
+          bad=0
+          case "$U" in ocid1.user.*) ;; *) echo "::error::Secret OCI_USER is empty or not an ocid1.user... value"; bad=1;; esac
+          case "$T" in ocid1.tenancy.*) ;; *) echo "::error::Secret OCI_TENANCY is empty or not an ocid1.tenancy... value"; bad=1;; esac
+          case "$F" in ??:??:??:??:??:??:??:??:??:??:??:??:??:??:??:??) ;; *) echo "::error::Secret OCI_FINGERPRINT is empty or not 16 hex pairs like cb:8f:..."; bad=1;; esac
+          [ -n "$R" ] || { echo "::error::Secret OCI_REGION is empty"; bad=1; }
+          [ -n "$SSH_PUBLIC_KEY" ] || { echo "::error::Secret SSH_PUBLIC_KEY is empty"; bad=1; }
+          [ -n "$OCI_KEY_PEM" ] || { echo "::error::Secret OCI_KEY_PEM is empty"; bad=1; }
+          [ "$bad" = 0 ] || exit 1
+
+          # Private key: accept raw PEM, or base64 of the PEM by mistake.
+          case "$OCI_KEY_PEM" in
+            *"BEGIN"*) printf '%s\n' "$OCI_KEY_PEM" > ~/.oci/oci_api_key.pem ;;
+            *) printf '%s' "$OCI_KEY_PEM" | tr -d '\r\n ' | base64 -d > ~/.oci/oci_api_key.pem ;;
+          esac
+          grep -q "BEGIN" ~/.oci/oci_api_key.pem || { echo "::error::OCI_KEY_PEM is not a valid PEM private key"; exit 1; }
+
           printf '%s\n' "$SSH_PUBLIC_KEY" > ~/.ssh/control-hub.pub
-          cat > ~/.oci/config <<EOF
-          [DEFAULT]
-          user=$OCI_USER
-          fingerprint=$OCI_FINGERPRINT
-          tenancy=$OCI_TENANCY
-          region=$OCI_REGION
-          key_file=$HOME/.oci/oci_api_key.pem
-          EOF
+          {
+            echo "[DEFAULT]"
+            echo "user=$U"
+            echo "fingerprint=$F"
+            echo "tenancy=$T"
+            echo "region=$R"
+            echo "key_file=$HOME/.oci/oci_api_key.pem"
+          } > ~/.oci/config
 
       - name: Attempt launch (one try)
         id: launch

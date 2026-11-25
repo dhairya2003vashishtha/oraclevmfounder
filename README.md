@@ -1,6 +1,6 @@
 # Kadence Oracle VM retry
 
-Tries to launch the Oracle Cloud Always Free ARM VM "Kadence" (2 OCPU / 12 GB / 145 GB, Ubuntu 24.04)
+Tries to launch the Oracle Cloud Always Free ARM VM "Kadence" (2 OCPU / 12 GB / 165 GB, Ubuntu 24.04)
 on a schedule using GitHub Actions, so it keeps running when your PC is off.
 When the VM is up (or the launch is blocked) it opens an issue (GitHub emails you) and disables itself.
 

@@ -1,4 +1,4 @@
-"""Kadence: Always Free A1 (ARM) VM - 2 OCPU / 12 GB RAM / 145 GB boot volume.
+"""Kadence: Always Free A1 (ARM) VM - 2 OCPU / 12 GB RAM / 165 GB boot volume.
 
 ONE attempt per run (a scheduler calls it every 10 min). Idempotent: if an instance named
 Kadence already exists it just reports it. Reuses the control-hub VCN/subnet (creates if missing).
@@ -16,7 +16,7 @@ import os, sys, time
 import oci
 
 NAME, SHAPE = "Kadence", "VM.Standard.A1.Flex"
-OCPUS, MEM_GB, BOOT_GB = 2, 12, 145
+OCPUS, MEM_GB, BOOT_GB = 2, 12, 165
 
 cfg = oci.config.from_file()
 t = cfg["tenancy"]
