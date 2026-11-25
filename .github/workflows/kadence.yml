@@ -2,9 +2,9 @@ name: Kadence VM retry
 
 on:
   schedule:
-    # Every 30 min. Public repo = unlimited Actions minutes, so you can use "*/10 * * * *".
-    # Private repo = 2000 free min/month, so keep this at 30 min or slower.
-    - cron: "*/30 * * * *"
+    # Every 10 min (repo is public = unlimited Actions minutes).
+    # If you make the repo private again, change to "*/30 * * * *" (2000 free min/month).
+    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 concurrency:
