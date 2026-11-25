@@ -63,7 +63,13 @@ jobs:
             *"BEGIN"*) printf '%s\n' "$OCI_KEY_PEM" > ~/.oci/oci_api_key.pem ;;
             *) printf '%s' "$OCI_KEY_PEM" | tr -d '\r\n ' | base64 -d > ~/.oci/oci_api_key.pem ;;
           esac
-          grep -q "BEGIN" ~/.oci/oci_api_key.pem || { echo "::error::OCI_KEY_PEM is not a valid PEM private key"; exit 1; }
+          # Keep only the BEGIN..END block (drops stray text such as a trailing "OCI_API_KEY" line).
+          sed -n '/-----BEGIN/,/-----END/p' ~/.oci/oci_api_key.pem > ~/.oci/key.tmp && mv ~/.oci/key.tmp ~/.oci/oci_api_key.pem
+          if ! grep -q "BEGIN PRIVATE KEY\|BEGIN RSA PRIVATE KEY" ~/.oci/oci_api_key.pem || ! grep -q "END " ~/.oci/oci_api_key.pem; then
+            echo "::error::Secret OCI_KEY_PEM is not the private key. It must start with -----BEGIN PRIVATE KEY----- and end with -----END PRIVATE KEY-----. Copy it from oci_api_key.pem (not the _public file, not the SSH key)."
+            exit 1
+          fi
+          chmod 600 ~/.oci/oci_api_key.pem
 
           printf '%s\n' "$SSH_PUBLIC_KEY" > ~/.ssh/control-hub.pub
           {
